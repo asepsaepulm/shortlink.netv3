@@ -1,0 +1,18 @@
+{
+  "hero": {
+    "title": "Shorten Your URLs, Maximize Your Earnings",
+    "subtitle": "Free link shortening, real-time stats, and monetize every click.",
+    "placeholder": "Paste your long URL here...",
+    "button": "Shorten",
+    "tab_single": "Single URL",
+    "tab_bulk": "Bulk URL",
+    "bulk_placeholder": "Paste URLs one per line (max 100)...",
+    "cta": "Sign up free for stats & unlimited links"
+  },
+  "table": {
+    "original": "Original URL",
+    "short": "Short URL",
+    "copy_all": "Copy All",
+    "export": "Export CSV"
+  }
+}

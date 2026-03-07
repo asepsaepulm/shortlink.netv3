@@ -1,0 +1,18 @@
+{
+  "hero": {
+    "title": "Persingkat URL Kamu, Maksimalkan Penghasilan",
+    "subtitle": "Shorten link gratis, pantau statistik real-time, dan monetisasi setiap klik.",
+    "placeholder": "Paste URL panjang kamu di sini...",
+    "button": "Persingkat",
+    "tab_single": "Single URL",
+    "tab_bulk": "Bulk URL",
+    "bulk_placeholder": "Paste URL satu per baris (maks 100 URL)...",
+    "cta": "Daftar gratis untuk statistik & unlimited link"
+  },
+  "table": {
+    "original": "URL Asli",
+    "short": "Short URL",
+    "copy_all": "Salin Semua",
+    "export": "Export CSV"
+  }
+}
