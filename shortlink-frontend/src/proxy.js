@@ -1,8 +1,8 @@
-import createMiddleware from 'next-intl/middleware';
+import createProxy from 'next-intl/proxy';
 import { NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
 
-const intlMiddleware = createMiddleware(routing);
+const intlProxy = createProxy(routing);
 
 export default async function proxy(req) {
   const { pathname } = req.nextUrl;
@@ -28,7 +28,7 @@ export default async function proxy(req) {
   }
 
   // Semua request lain → next-intl handle
-  return intlMiddleware(req);
+  return intlProxy(req);
 }
 
 export const config = {
