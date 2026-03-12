@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { getMessages } from 'next-intl/server';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { AuthModalProvider } from '@/context/AuthModalContext';
+import AuthModal from '@/components/AuthModal';
 import '../globals.css';
 
 export default async function LocaleLayout({ children, params }) {
@@ -20,7 +22,12 @@ export default async function LocaleLayout({ children, params }) {
       </head>
       <body>
         <NextIntlClientProvider messages={messages}>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <AuthModalProvider>
+              {children}
+              <AuthModal />
+            </AuthModalProvider>
+          </ThemeProvider>
         </NextIntlClientProvider>
       </body>
     </html>

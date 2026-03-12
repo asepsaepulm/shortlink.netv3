@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Link {
+  id          Int         @id @default(autoincrement())
+  code        String      @unique(map: "uq_code") @db.VarChar(20)
+  slug        String?     @db.VarChar(255)                          // ✅ tambah ini
+  shortUrl    String?     @map("short_url") @db.Text                // ✅ tambah ini
+  originalUrl String      @map("original_url") @db.Text
+  domain      String      @default("short.ly") @db.VarChar(100)
+  ogTitle     String?     @map("og_title") @db.VarChar(255)
+  ogImageUrl  String?     @map("og_image_url") @db.Text
+  clicks      Int         @default(0)
+  userId      Int?        @map("user_id")
+  isActive    Boolean     @default(true) @map("is_active")
+  expiresAt   DateTime?   @map("expires_at") @db.DateTime(0)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  linkClicks  LinkClick[]
+  user        User?       @relation(fields: [userId], references: [id], onUpdate: Restrict, map: "fk_links_user")
+
+  @@index([createdAt], map: "idx_created_at")
+  @@index([domain], map: "idx_domain")
+  @@index([userId], map: "idx_user_id")
+  @@map("links")
+}
+
+model LinkClick {
+  id        Int      @id @default(autoincrement())
+  linkId    Int      @map("link_id")
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.Text
+  referer   String?  @db.Text
+  country   String?  @db.VarChar(100)
+  clickedAt DateTime @default(now()) @map("clicked_at") @db.DateTime(0)
+  link      Link     @relation(fields: [linkId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_link_clicks_link")
+
+  @@index([clickedAt], map: "idx_clicked_at")
+  @@index([linkId], map: "idx_link_id")
+  @@map("link_clicks")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  email     String   @unique(map: "uq_email") @db.VarChar(150)
+  password  String   @db.VarChar(255)
+  avatar    String?  @db.VarChar(255)
+  role      Role     @default(user)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  links     Link[]
+
+  @@map("users")
+}
+
+enum Role {
+  admin
+  user
+}
