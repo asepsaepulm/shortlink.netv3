@@ -1,13 +1,12 @@
-import createProxy from 'next-intl/proxy';
+import createMiddleware from 'next-intl/middleware'; // ← tetap middleware!
 import { NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
 
-const intlProxy = createProxy(routing);
+const intlProxy = createMiddleware(routing); // ← nama variabel bebas
 
 export default async function proxy(req) {
   const { pathname } = req.nextUrl;
 
-  // Handle shortlink redirect /r/[code]
   if (pathname.startsWith('/r/')) {
     const code = pathname.split('/r/')[1]?.split('/')[0];
     if (code) {
@@ -27,7 +26,6 @@ export default async function proxy(req) {
     }
   }
 
-  // Semua request lain → next-intl handle
   return intlProxy(req);
 }
 
