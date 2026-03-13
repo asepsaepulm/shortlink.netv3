@@ -5,7 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useTheme } from '@/context/ThemeContext';
 import { IconGlobe, IconLink, IconSearch, IconWand, IconChart, IconSettings, IconEye, IconChevronDown } from './Icons';
 
-const DOMAINS = ['short.ly', 'lnk.id', 'go.io', 'vidz.site'];
+const DOMAINS = ['shortl.site', 'lnk.id', 'go.io', 'vidz.site'];
 const PREVIEW_CODE = 'xxxxxxx';
 
 export default function ShortenForm() {

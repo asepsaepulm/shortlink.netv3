@@ -13,7 +13,7 @@ model Link {
   slug        String?     @db.VarChar(255)                          // ✅ tambah ini
   shortUrl    String?     @map("short_url") @db.Text                // ✅ tambah ini
   originalUrl String      @map("original_url") @db.Text
-  domain      String      @default("short.ly") @db.VarChar(100)
+  domain      String      @default("shortl.site") @db.VarChar(100)
   ogTitle     String?     @map("og_title") @db.VarChar(255)
   ogImageUrl  String?     @map("og_image_url") @db.Text
   clicks      Int         @default(0)

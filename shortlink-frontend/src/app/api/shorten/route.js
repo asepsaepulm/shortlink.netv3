@@ -24,7 +24,7 @@ export async function POST(req) {
     const formData = await req.formData();
 
     const originalUrl = formData.get('originalUrl')?.toString().trim();
-    const domain = formData.get('domain')?.toString().trim() || 'short.ly';
+    const domain = formData.get('domain')?.toString().trim() || 'shortl.site';
     const slugInput = formData.get('slug')?.toString().trim() || '';
     const ogTitle = formData.get('ogTitle')?.toString().trim() || null;
     const ogImageUrl = formData.get('ogImageUrl')?.toString().trim() || null;
