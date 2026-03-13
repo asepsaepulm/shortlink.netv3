@@ -10,10 +10,10 @@ datasource db {
 model Link {
   id          Int         @id @default(autoincrement())
   code        String      @unique(map: "uq_code") @db.VarChar(20)
-  slug        String?     @db.VarChar(255)                          // ✅ tambah ini
-  shortUrl    String?     @map("short_url") @db.Text                // ✅ tambah ini
+  slug        String?     @db.VarChar(255)
+  shortUrl    String?     @map("short_url") @db.Text
   originalUrl String      @map("original_url") @db.Text
-  domain      String      @default("shortl.site") @db.VarChar(100)
+  domain      String      @default("short.site") @db.VarChar(100)
   ogTitle     String?     @map("og_title") @db.VarChar(255)
   ogImageUrl  String?     @map("og_image_url") @db.Text
   clicks      Int         @default(0)

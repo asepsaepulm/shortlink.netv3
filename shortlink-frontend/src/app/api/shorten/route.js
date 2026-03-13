@@ -45,9 +45,9 @@ export async function POST(req) {
       exists = await prisma.link.findUnique({ where: { code } });
     }
 
-    // ✅ shortUrl: domain/r/CODE atau domain/r/CODE/slug
+    // ✅ shortUrl: domain/CODE atau domain/CODE/slug
     const path = slug ? `${code}/${slug}` : code;
-    const shortUrl = `https://${domain}/r/${path}`;
+    const shortUrl = `https://${domain}/${path}`;
 
     let finalOgImageUrl = ogImageUrl;
 

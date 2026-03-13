@@ -217,7 +217,7 @@ export default function ShortenForm() {
       const res = await fetch('/api/shorten', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal membuat shortlink');
-      setResults([{ original: url, short: data.shortUrl }]);
+      setResults([{ original: url, short: data.shortUrl, code: data.code }]);
       toast.success('Shortlink berhasil dibuat!');
       setUrl('');
       setSlug('');
@@ -250,7 +250,7 @@ export default function ShortenForm() {
     }
   };
 
-  const previewUrl = slug.trim() ? `${domain}/r/${PREVIEW_CODE}/${slug}` : `${domain}/r/${PREVIEW_CODE}`;
+  const previewUrl = slug.trim() ? `${domain}/${PREVIEW_CODE}/${slug}` : `${domain}/${PREVIEW_CODE}`;
 
   return (
     <div>
@@ -364,7 +364,7 @@ export default function ShortenForm() {
                     <div style={{ overflow: 'hidden' }}>
                       <div style={s.accordionBody}>
                         <p style={{ margin: 0, fontSize: '12px', color: clr.muted, lineHeight: 1.6 }}>
-                          Format: <span style={{ color: '#6366f1', fontWeight: 600 }}>{domain}/r/[auto-code]/your-slug</span>
+                          Format: <span style={{ color: '#6366f1', fontWeight: 600 }}>{domain}/[auto-code]/your-slug</span>
                         </p>
                         <input className="elegant-input" type="text" value={slug} onChange={(e) => setSlug(sanitizeSlug(e.target.value))} placeholder="custom-slug" style={s.inputPlain} />
                         {slug.trim() && (
@@ -456,7 +456,7 @@ export default function ShortenForm() {
                     <span style={s.iconLeft}>
                       <IconSearch stroke={clr.iconStroke} />
                     </span>
-                    <input name="shortcode" type="text" style={s.input} placeholder="https://short.ly/r/TZbAgZo" />
+                    <input name="shortcode" type="text" style={s.input} placeholder="https://shortl.site/TZbAgZo" />
                   </div>
                 </div>
                 <button type="submit" style={s.outlineBtn}>
