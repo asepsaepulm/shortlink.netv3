@@ -1,227 +1,154 @@
-import fs from 'fs';
-import path from 'path';
+/**
+ * statsTracker.js
+ *
+ * Serverless-compatible stats & leaderboard tracker.
+ * Uses in-memory (module-level) caches instead of the local filesystem,
+ * so it works on Vercel, Railway, Render, and any other serverless host.
+ *
+ * NOTE: In-memory state is per-process. On serverless platforms each invocation
+ * may be a fresh instance, so the cache falls through to the DB — which is fine;
+ * that's their "correct" behaviour. The cache just prevents hammering the DB
+ * across requests that land on the same warm instance.
+ */
+
 import { prisma } from './prisma';
 
-// Define the path to our stats.json
-const dataDir = path.join(process.cwd(), 'data');
-const statsFile = path.join(dataDir, 'stats.json');
-const leaderboardFile = path.join(dataDir, 'leaderboard.json');
+// ---------------------------------------------------------------------------
+// IN-MEMORY STATS CACHE
+// ---------------------------------------------------------------------------
 
-// Ensure directory exist
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+let statsCache = null;        // { linksCreated, clicksRecorded, activeUsers, lastActiveUserUpdate }
+let statsCacheTime = 0;       // timestamp of last DB seed
+const STATS_TTL = 10_000;     // 10 seconds
 
-// Ensure the stats are initialized (Async so it can hit DB if missing)
-export async function initStats() {
-  if (!fs.existsSync(statsFile)) {
-    try {
-      console.log('[STATS TRACKER] Initializing from Database...');
-
-      // Grab absolute counts directly from the DB
-      const totalLinks = await prisma.link.count();
-      const totalClicks = await prisma.linkClick.count();
-
-      // Compute an estimate of "Active Users"
-      // For realism based on DB, we can count distinct IPs in the last 15 minutes
-      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-
-      // Try group by IP logic or fallback
-      let activeUsers = 0;
-      try {
-        const recentClicks = await prisma.linkClick.groupBy({
-          by: ['ipAddress'],
-          where: { clickedAt: { gte: fifteenMinsAgo } },
-        });
-        activeUsers = Math.max(recentClicks.length, 1); // Minimum 1 if app is running
-      } catch (e) {
-        // Fallback if groupBy is slow or unsupported
-        const recentCount = await prisma.linkClick.count({
-          where: { clickedAt: { gte: fifteenMinsAgo } },
-        });
-        activeUsers = Math.max(Math.ceil(recentCount / 3), 1);
-      }
-
-      const initialStats = {
-        linksCreated: totalLinks,
-        clicksRecorded: totalClicks,
-        activeUsers: activeUsers,
-        lastActiveUserUpdate: Date.now(),
-      };
-
-      fs.writeFileSync(statsFile, JSON.stringify(initialStats, null, 2));
-      console.log('[STATS TRACKER] Successfully seeded from DB:', initialStats);
-    } catch (err) {
-      console.error('[STATS TRACKER] Error seeding from DB:', err);
-      // Fallback
-      fs.writeFileSync(
-        statsFile,
-        JSON.stringify(
-          {
-            linksCreated: 0,
-            clicksRecorded: 0,
-            activeUsers: 1,
-            lastActiveUserUpdate: Date.now(),
-          },
-          null,
-          2,
-        ),
-      );
-    }
+async function loadStats() {
+  const now = Date.now();
+  // If we have a fresh cache, return it immediately
+  if (statsCache && (now - statsCacheTime < STATS_TTL)) {
+    return statsCache;
   }
-}
 
-// Grab stats logic, maintaining the 5-min active user sampling
-export async function getStats() {
   try {
-    await initStats();
-    const raw = fs.readFileSync(statsFile, 'utf8');
-    const stats = JSON.parse(raw);
+    const [totalLinks, totalClicks] = await Promise.all([
+      prisma.link.count(),
+      prisma.linkClick.count(),
+    ]);
 
-    // Update active users every 5 minutes (5 * 60 * 1000 ms)
-    const now = Date.now();
-    if (now - stats.lastActiveUserUpdate > 300000) {
-      // Refresh active user estimate dynamically without heavy DB grouping
-      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const recentClicks = await prisma.linkClick.count({
+    const fiveMinsAgo = new Date(now - 5 * 60 * 1000);
+    let activeUsers = 1;
+    try {
+      const recentGroups = await prisma.linkClick.groupBy({
+        by: ['ipAddress'],
         where: { clickedAt: { gte: fiveMinsAgo } },
       });
-      // A realistic multiplier algorithm based on raw traffic volume
-      stats.activeUsers = Math.max(Math.floor(recentClicks * 1.5), 1);
-      stats.lastActiveUserUpdate = now;
-      saveStats(stats);
+      activeUsers = Math.max(recentGroups.length, 1);
+    } catch (_) {
+      const recentCount = await prisma.linkClick.count({
+        where: { clickedAt: { gte: fiveMinsAgo } },
+      });
+      activeUsers = Math.max(Math.ceil(recentCount / 3), 1);
     }
 
-    return stats;
+    statsCache = {
+      linksCreated: totalLinks,
+      clicksRecorded: totalClicks,
+      activeUsers,
+      lastActiveUserUpdate: now,
+    };
+    statsCacheTime = now;
   } catch (err) {
-    console.error('[STATS TRACKER] Read Error:', err);
-    return { linksCreated: 0, clicksRecorded: 0, activeUsers: 1 };
+    console.error('[STATS TRACKER] DB error loading stats:', err);
+    // Return stale cache if we have one, otherwise default zeros
+    if (!statsCache) {
+      statsCache = { linksCreated: 0, clicksRecorded: 0, activeUsers: 1, lastActiveUserUpdate: now };
+    }
   }
+
+  return statsCache;
 }
 
+/**
+ * Public: return current hero stats (always from DB on first call / after TTL).
+ */
+export async function getStats() {
+  return await loadStats();
+}
+
+/**
+ * Public: called after a new link is created.
+ * Bumps the in-memory counter optimistically; DB is the source of truth.
+ */
 export async function incrementLinks(count = 1) {
-  try {
-    const stats = await getStats();
-    stats.linksCreated += count;
-    saveStats(stats);
-  } catch (err) {
-    console.error('Failed to increment links:', err);
-  }
+  const stats = await loadStats();
+  stats.linksCreated += count;
 }
 
+/**
+ * Public: called after a real (non-bot) click is recorded.
+ */
 export async function incrementClicks(count = 1) {
-  try {
-    const stats = await getStats();
-    stats.clicksRecorded += count;
-    // For every click hitting the server, active presence increases naturally
-    // Add small random bump to active users on burst traffic
-    if (Math.random() < 0.2) {
-      stats.activeUsers += 1;
-    }
-    saveStats(stats);
-  } catch (err) {
-    console.error('Failed to increment clicks:', err);
-  }
-}
-
-function saveStats(stats) {
-  try {
-    fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
-  } catch (err) {
-    console.error('Failed to save stats:', err);
+  const stats = await loadStats();
+  stats.clicksRecorded += count;
+  if (Math.random() < 0.2) {
+    stats.activeUsers += 1;
   }
 }
 
 // ---------------------------------------------------------------------------
-// LEADERBOARD CACHING LOGIC
+// IN-MEMORY LEADERBOARD CACHE
 // ---------------------------------------------------------------------------
 
-// Get top links, heavily cached on disk (refreshes every 30s max)
+let leaderboardCache = null;   // array of { user, clicks }
+let leaderboardCacheTime = 0;  // ms
+const LEADERBOARD_TTL = 5_000; // 5 seconds
+
+/**
+ * Public: return grouped leaderboard (users ordered by total clicks descending).
+ */
 export async function getTopLeaderboard(limit = 10) {
+  const now = Date.now();
+
+  // Return fresh cache if available
+  if (leaderboardCache && (now - leaderboardCacheTime < LEADERBOARD_TTL)) {
+    return leaderboardCache;
+  }
+
   try {
-    const now = Date.now();
-    let cacheValid = false;
+    // Group all active links by userId, summing their clicks
+    const topUsersGroups = await prisma.link.groupBy({
+      by: ['userId'],
+      where: { isActive: true },
+      _sum: { clicks: true },
+      orderBy: { _sum: { clicks: 'desc' } },
+      take: limit,
+    });
 
-    // Check if cache exists and is fresh
-    if (fs.existsSync(leaderboardFile)) {
-      try {
-        const raw = fs.readFileSync(leaderboardFile, 'utf8');
-        const cache = JSON.parse(raw);
+    // Fetch names for non-null userIds
+    const userIds = topUsersGroups
+      .filter((g) => g.userId !== null)
+      .map((g) => g.userId);
 
-        // If cache is less than 5 seconds old, use it
-        if (cache && cache.timestamp && now - cache.timestamp < 5000) {
-          cacheValid = true;
-          return cache.data;
-        }
-      } catch (parseErr) {
-        console.warn('[LEADERBOARD] Cache invalid or corrupt, refreshing...');
-      }
+    const usersMap = {};
+    if (userIds.length > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true },
+      });
+      users.forEach((u) => { usersMap[u.id] = u.name; });
     }
 
-    if (!cacheValid) {
-      // Cache miss or stale -> Query the database grouped by user
-      const topUsersGroups = await prisma.link.groupBy({
-        by: ['userId'],
-        where: { isActive: true },
-        _sum: {
-          clicks: true,
-        },
-        orderBy: {
-          _sum: {
-            clicks: 'desc',
-          },
-        },
-        take: limit,
-      });
+    const formattedData = topUsersGroups.map((group) => ({
+      user: (group.userId && usersMap[group.userId]) ? usersMap[group.userId] : 'Guest',
+      clicks: group._sum.clicks || 0,
+    }));
 
-      // We need user names since groupBy can't include relations
-      // Extract all unique non-null userIds
-      const userIds = topUsersGroups.filter((g) => g.userId !== null).map((g) => g.userId);
+    // Store in-memory cache
+    leaderboardCache = formattedData;
+    leaderboardCacheTime = now;
 
-      let usersMap = {};
-      if (userIds.length > 0) {
-        const users = await prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true },
-        });
-        users.forEach((u) => {
-          usersMap[u.id] = u.name;
-        });
-      }
-
-      // Format the data specifically for the frontend
-      const formattedData = topUsersGroups.map((group) => {
-        let name = 'Guest';
-        if (group.userId && usersMap[group.userId]) {
-          name = usersMap[group.userId];
-        }
-
-        return {
-          user: name,
-          clicks: group._sum.clicks || 0,
-        };
-      });
-
-      // Combine duplicate Anonymous Users if there are any (e.g. if we grouped by null)
-      // Actually `groupBy` with `userId` will automatically group all nulls into one row!
-
-      fs.writeFileSync(
-        leaderboardFile,
-        JSON.stringify(
-          {
-            timestamp: now,
-            data: formattedData,
-          },
-          null,
-          2,
-        ),
-      );
-
-      return formattedData;
-    }
+    return formattedData;
   } catch (err) {
     console.error('[LEADERBOARD] Fetch Error:', err);
-    // Fallback if DB completely fails
-    return [];
+    return leaderboardCache || [];
   }
 }
