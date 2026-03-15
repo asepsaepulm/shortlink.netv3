@@ -2,12 +2,20 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuthModal } from '@/context/AuthModalContext';
+import { useLocale } from 'next-intl';
 
 export default function AuthModal() {
   const { dark } = useTheme();
   const { isOpen, closeModal } = useAuthModal();
   const [isLogin, setIsLogin] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const locale = useLocale();
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -24,12 +32,52 @@ export default function AuthModal() {
 
   if (!mounted) return null;
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+    const body = isLogin ? { email, password } : { name, email, password };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Something went wrong');
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      closeModal();
+
+      if (data.user.role === 'admin') {
+        window.location.href = `/${locale}/admin`;
+      } else {
+        window.location.href = `/${locale}/dashboard`;
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const clr = {
     inputBg: dark ? 'rgba(15, 23, 42, 0.6)' : '#ffffff',
     inputBorder: dark ? '#334155' : '#e2e8f0',
     inputText: dark ? '#f1f5f9' : '#1e293b',
     textMuted: dark ? '#94a3b8' : '#64748b',
     accent: '#6366f1',
+    error: '#ef4444',
   };
 
   const inputStyle = {
@@ -48,7 +96,6 @@ export default function AuthModal() {
 
   return (
     <>
-      {/* Overlay */}
       <div
         onClick={closeModal}
         style={{
@@ -63,7 +110,6 @@ export default function AuthModal() {
         }}
       />
 
-      {/* Modal Card */}
       <div
         style={{
           position: 'fixed',
@@ -90,12 +136,11 @@ export default function AuthModal() {
             overflow: 'hidden',
           }}
         >
-          {/* Glow dekorasi */}
           <div style={{ position: 'absolute', top: '-60px', right: '-60px', width: '180px', height: '180px', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', bottom: '-60px', left: '-60px', width: '180px', height: '180px', background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-          {/* Close button */}
           <button
+            type="button"
             onClick={closeModal}
             style={{
               position: 'absolute',
@@ -118,7 +163,6 @@ export default function AuthModal() {
             ✕
           </button>
 
-          {/* Logo */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '28px' }}>
             <div
               style={{
@@ -139,29 +183,29 @@ export default function AuthModal() {
             </div>
           </div>
 
-          {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <h2 style={{ fontSize: '26px', fontWeight: 800, color: dark ? '#ffffff' : '#1e293b', marginBottom: '8px', letterSpacing: '-0.5px' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
             <p style={{ color: clr.textMuted, fontSize: '14px', margin: 0 }}>{isLogin ? 'Sign in to manage your short links.' : 'Join us to start shortening your links.'}</p>
           </div>
 
-          {/* Form */}
-          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {error && <div style={{ color: clr.error, fontSize: '13px', textAlign: 'center', fontWeight: 'bold' }}>{error}</div>}
+
             {!isLogin && (
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: dark ? '#cbd5e1' : '#475569', marginBottom: '8px' }}>Full Name</label>
-                <input type="text" placeholder="John Doe" style={inputStyle} className="auth-modal-input" />
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} required={!isLogin} placeholder="John Doe" style={inputStyle} className="auth-modal-input" />
               </div>
             )}
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: dark ? '#cbd5e1' : '#475569', marginBottom: '8px' }}>Email Address</label>
-              <input type="email" placeholder="name@company.com" style={inputStyle} className="auth-modal-input" />
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: dark ? '#cbd5e1' : '#475569', marginBottom: '8px' }}>Email Address / Username</label>
+              <input type="text" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin or name@company.com" style={inputStyle} className="auth-modal-input" />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: dark ? '#cbd5e1' : '#475569', marginBottom: '8px' }}>Password</label>
-              <input type="password" placeholder="••••••••" style={inputStyle} className="auth-modal-input" />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" style={inputStyle} className="auth-modal-input" />
             </div>
 
             {isLogin && (
@@ -174,6 +218,7 @@ export default function AuthModal() {
 
             <button
               type="submit"
+              disabled={loading}
               style={{
                 marginTop: '8px',
                 padding: '14px',
@@ -183,19 +228,26 @@ export default function AuthModal() {
                 color: 'white',
                 fontWeight: 700,
                 fontSize: '15px',
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
                 transition: 'opacity 0.15s',
                 boxShadow: '0 8px 20px rgba(99,102,241,0.3)',
               }}
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
+              {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
             </button>
           </form>
 
-          {/* Switcher */}
           <div style={{ marginTop: '28px', textAlign: 'center', fontSize: '14px', color: clr.textMuted }}>
             {isLogin ? "Don't have an account? " : 'Already have an account? '}
-            <button onClick={() => setIsLogin(!isLogin)} style={{ background: 'none', border: 'none', color: clr.accent, fontWeight: 700, cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+              }}
+              style={{ background: 'none', border: 'none', color: clr.accent, fontWeight: 700, cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}
+            >
               {isLogin ? 'Sign up free' : 'Sign in'}
             </button>
           </div>

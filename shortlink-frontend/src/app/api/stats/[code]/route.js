@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(req, { params }) {
   try {
-    const { code } = params;
+    const { code } = await params;
+    const link = await prisma.link.findUnique({ where: { code } });
+    if (!link) return NextResponse.json({ error: 'Shortlink tidak ditemukan' }, { status: 404 });
 
-    // TODO: ambil dari database
-    // const data = await db.findByCode(code)
-    // if (!data) return NextResponse.json({ error: 'Shortlink tidak ditemukan' }, { status: 404 })
-
-    // Dummy response untuk sementara
     return NextResponse.json({
-      code,
-      originalUrl: 'https://example.com',
-      clicks: 42,
-      createdAt: new Date().toISOString(),
+      code: link.code,
+      shortUrl: link.shortUrl,
+      originalUrl: link.originalUrl,
+      clicks: link.clicks,
+      domain: link.domain,
+      createdAt: link.createdAt,
+      ogTitle: link.ogTitle, // ✅ tambah
+      ogImageUrl: link.ogImageUrl, // ✅ tambah
     });
-  } catch {
+  } catch (err) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

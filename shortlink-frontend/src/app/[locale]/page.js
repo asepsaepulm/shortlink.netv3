@@ -1,11 +1,14 @@
 import Navbar from '@/components/Navbar';
 import HeroSection from '@/components/HeroSection';
+import { getStats } from '@/lib/statsTracker';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const initialStats = await getStats();
+
   return (
     <main style={{ minHeight: '100vh', background: '#f0f4ff' }}>
       <Navbar />
-      <HeroSection />
+      <HeroSection initialStats={initialStats} />
     </main>
   );
 }

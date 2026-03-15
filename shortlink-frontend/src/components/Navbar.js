@@ -197,7 +197,7 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* ✅ Login item di mobile menu */}
+          {/* ✅ Login item di mobile menu
           {!isLoggedIn && (
             <button
               onClick={() => {
@@ -221,7 +221,7 @@ export default function Navbar() {
               </svg>
               LOGIN
             </button>
-          )}
+          )} */}
 
           {/* Dark Mode Toggle */}
           <button

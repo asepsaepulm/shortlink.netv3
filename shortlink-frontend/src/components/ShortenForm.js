@@ -4,6 +4,7 @@ import ShortlinkResult from './ShortlinkResult';
 import toast, { Toaster } from 'react-hot-toast';
 import { useTheme } from '@/context/ThemeContext';
 import { IconGlobe, IconLink, IconSearch, IconWand, IconChart, IconSettings, IconEye, IconChevronDown } from './Icons';
+import ShortlinkStats from './ShortlinkStats';
 
 const DOMAINS = ['shortl.site', 'lnk.id', 'go.io', 'vidz.site'];
 const PREVIEW_CODE = 'xxxxxxx';
@@ -23,13 +24,14 @@ export default function ShortenForm() {
   const [showOptions, setShowOptions] = useState(false);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [statsData, setStatsData] = useState(null);
 
+  // ✅ Saat typing: tidak hapus trailing karakter spesial dulu
   const sanitizeSlug = (value) =>
     value
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/[^a-z0-9._-]/g, '-')
+      .replace(/[-_.]{2,}/g, (m) => m[0]);
 
   const clr = {
     card: dark ? '#1e293b' : 'white',
@@ -207,14 +209,30 @@ export default function ShortenForm() {
         setLoading(false);
         return;
       }
+      // ✅ Trim trailing karakter spesial saat submit
+      const finalSlug = slug.replace(/^[-_.]|[-_.]$/g, '');
       const formData = new FormData();
       formData.append('originalUrl', url.trim());
       formData.append('domain', domain);
-      if (slug.trim()) formData.append('slug', slug.trim());
+      if (finalSlug) formData.append('slug', finalSlug);
       if (ogTitle.trim()) formData.append('ogTitle', ogTitle.trim());
       if (ogImageUrl.trim()) formData.append('ogImageUrl', ogImageUrl.trim());
       if (uploadedFile) formData.append('ogImageFile', uploadedFile);
-      const res = await fetch('/api/shorten', { method: 'POST', body: formData });
+      
+      const fetchOptions = {
+        method: 'POST',
+        body: formData,
+      };
+      
+      // Attempt to get user JWT token if logged in
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          fetchOptions.headers = { Authorization: `Bearer ${token}` };
+        }
+      } catch (e) {}
+
+      const res = await fetch('/api/shorten', fetchOptions);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal membuat shortlink');
       setResults([{ original: url, short: data.shortUrl, code: data.code }]);
@@ -243,7 +261,8 @@ export default function ShortenForm() {
       const res = await fetch(`/api/stats/${code}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Shortlink tidak ditemukan');
-      setResults([{ original: data.originalUrl, short: input, clicks: data.clicks }]);
+      setStatsData(data);
+      setResults([]);
       toast.success('Statistik ditemukan!');
     } catch (err) {
       toast.error(err.message);
@@ -252,13 +271,24 @@ export default function ShortenForm() {
 
   const previewUrl = slug.trim() ? `${domain}/${PREVIEW_CODE}/${slug}` : `${domain}/${PREVIEW_CODE}`;
 
+  // Helper for reading uploaded file preview
+  const getImageUrl = () => {
+    if (uploadedFile) return URL.createObjectURL(uploadedFile);
+    if (ogImageUrl) return ogImageUrl;
+    return null;
+  };
+
+  const displayImage = getImageUrl();
+  const displayTitle = ogTitle.trim() || 'Link preview title';
+  const displayDomain = domain.toUpperCase();
+  const displayDesc = 'Click to follow link and see more details.';
+
   return (
     <div>
       <Toaster position="top-center" />
       <div style={s.card}>
         <div style={s.tabBar}>
           <button type="button" style={mainTab === 'generate' ? s.tabActive : s.tabInactive} onClick={() => setMainTab('generate')}>
-            {/* Icon Generate Link yang Elegan (Link + Sparkles) */}
             <svg
               width="18"
               height="18"
@@ -268,11 +298,7 @@ export default function ShortenForm() {
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                color: mainTab === 'generate' ? clr.tabActiveClr : clr.tabInactiveClr,
-                filter: mainTab === 'generate' ? 'drop-shadow(0px 2px 4px rgba(99,102,241,0.4))' : 'none',
-                transition: '0.3s',
-              }}
+              style={{ color: mainTab === 'generate' ? clr.tabActiveClr : clr.tabInactiveClr, filter: mainTab === 'generate' ? 'drop-shadow(0px 2px 4px rgba(99,102,241,0.4))' : 'none', transition: '0.3s' }}
             >
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
@@ -283,7 +309,6 @@ export default function ShortenForm() {
           </button>
 
           <button type="button" style={mainTab === 'stats' ? s.tabActive : s.tabInactive} onClick={() => setMainTab('stats')}>
-            {/* Icon Statistics yang Elegan (Dashboard/Chart) */}
             <svg
               width="18"
               height="18"
@@ -293,11 +318,7 @@ export default function ShortenForm() {
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                color: mainTab === 'stats' ? clr.tabActiveClr : clr.tabInactiveClr,
-                filter: mainTab === 'stats' ? 'drop-shadow(0px 2px 4px rgba(99,102,241,0.4))' : 'none',
-                transition: '0.3s',
-              }}
+              style={{ color: mainTab === 'stats' ? clr.tabActiveClr : clr.tabInactiveClr, filter: mainTab === 'stats' ? 'drop-shadow(0px 2px 4px rgba(99,102,241,0.4))' : 'none', transition: '0.3s' }}
             >
               <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
               <path d="M3 9h18"></path>
@@ -312,9 +333,7 @@ export default function ShortenForm() {
           <div key={mainTab} className="tab-content-enter">
             {mainTab === 'generate' ? (
               <form onSubmit={handleSubmit}>
-                {/* ✅ Domain + URL dalam 1 baris */}
                 <div style={{ ...s.fieldGroup, display: 'flex', gap: '10px' }}>
-                  {/* Domain — lebar tetap */}
                   <div style={{ position: 'relative', flexShrink: 0, width: '140px' }}>
                     <span style={s.iconLeft}>
                       <IconGlobe stroke={clr.iconStroke} />
@@ -330,8 +349,6 @@ export default function ShortenForm() {
                       <IconChevronDown stroke={clr.iconStroke} />
                     </span>
                   </div>
-
-                  {/* URL — mengisi sisa lebar */}
                   <div style={{ position: 'relative', flex: 1 }}>
                     <span style={s.iconLeft}>
                       <IconLink stroke={clr.iconStroke} />
@@ -340,7 +357,6 @@ export default function ShortenForm() {
                   </div>
                 </div>
 
-                {/* ✅ Preview URL — compact, inline di bawah input */}
                 <div style={{ marginBottom: '14px', marginTop: '-8px', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '2px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -350,7 +366,6 @@ export default function ShortenForm() {
                   {slug.trim() && <span style={{ flexShrink: 0, fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '100px', background: 'rgba(99,102,241,0.15)', color: '#6366f1' }}>custom slug</span>}
                 </div>
 
-                {/* Accordion: Custom Slug */}
                 <div style={s.accordion}>
                   <button type="button" style={s.accordionBtn} onClick={() => setShowSlug(!showSlug)}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -377,7 +392,6 @@ export default function ShortenForm() {
                   </div>
                 </div>
 
-                {/* Accordion: Advanced Options */}
                 <div style={s.accordion}>
                   <button type="button" style={s.accordionBtn} onClick={() => setShowOptions(!showOptions)}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -429,10 +443,65 @@ export default function ShortenForm() {
                             <span style={{ fontSize: '13px', color: clr.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadedFile ? uploadedFile.name : 'No file chosen'}</span>
                           </div>
                         </div>
+                        
+                        {/* ✅ Live Social Media Preview (now inside Advanced Options) */}
+                        <div style={{
+                          marginTop: '24px',
+                          border: `1px solid ${clr.accordionBorder}`,
+                          borderRadius: '10px',
+                          background: clr.accordionBody,
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${clr.accordionBorder}`, background: clr.accordion, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <IconEye stroke={clr.iconStroke} />
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: clr.label }}>Preview di Sosial Media</span>
+                          </div>
+                          <div style={{ padding: '16px', display: 'flex', justifyContent: 'center', background: dark ? '#0f172a' : '#f8fafc' }}>
+                            <div style={{
+                              width: '100%',
+                              maxWidth: '350px',
+                              background: clr.card,
+                              borderRadius: '8px',
+                              border: `1px solid ${clr.cardBorder}`,
+                              overflow: 'hidden',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                              <div style={{
+                                width: '100%',
+                                height: '180px',
+                                background: displayImage ? `url(${displayImage}) center/cover no-repeat` : clr.tabBar,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderBottom: `1px solid ${clr.cardBorder}`
+                              }}>
+                                {!displayImage && <span style={{ color: clr.muted, fontSize: '12px' }}>No Image</span>}
+                              </div>
+                              <div style={{ padding: '12px' }}>
+                                <div style={{ fontSize: '11px', color: clr.muted, fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                  {displayDomain}
+                                </div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: clr.label, marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {displayTitle}
+                                </div>
+                                <div style={{ fontSize: '13px', color: clr.muted, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                  {displayDesc}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ padding: '12px 16px', fontSize: '11px', color: clr.muted, lineHeight: 1.5 }}>
+                            <ol style={{ margin: 0, paddingLeft: '16px' }}>
+                              <li style={{ marginBottom: '4px' }}>Preview tampilan shortlink Anda. Di beberapa sosial media mungkin hasil akhirnya berbeda.</li>
+                              <li style={{ marginBottom: '4px' }}>Beberapa situs memerlukan akses crawler sehingga gambar mungkin tertunda.</li>
+                            </ol>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+
 
                 <button type="submit" className="premium-submit-btn" disabled={loading}>
                   {loading ? (
@@ -466,11 +535,15 @@ export default function ShortenForm() {
             )}
           </div>
 
-          {results.length > 0 && (
+          {/* ✅ Render hasil generate */}
+          {mainTab === 'generate' && results.length > 0 && (
             <div style={{ marginTop: '20px' }}>
               <ShortlinkResult results={results} />
             </div>
           )}
+
+          {/* ✅ Render hasil stats */}
+          {mainTab === 'stats' && statsData && <ShortlinkStats data={statsData} />}
         </div>
 
         <div style={s.footer}>
@@ -487,71 +560,14 @@ export default function ShortenForm() {
         .elegant-focus:focus-within { border-color: #6366f1 !important; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important; }
         @keyframes tabFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .tab-content-enter { animation: tabFadeIn 0.3s ease forwards; }
-
-        /* ======= PREMIUM SUBMIT BUTTON ======= */
-        .premium-submit-btn {
-          width: 100%;
-          margin-top: 10px;
-          padding: 14px;
-          border-radius: 12px;
-          border: none;
-          background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-          color: white;
-          font-weight: 700;
-          font-size: 15px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          position: relative;
-          overflow: hidden;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 10px 20px -10px rgba(99,102,241,0.6);
-        }
-
-        .premium-submit-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 15px 25px -10px rgba(99,102,241,0.8);
-        }
-
-        .premium-submit-btn:active:not(:disabled) {
-          transform: translateY(1px);
-        }
-
-        .premium-submit-btn:disabled {
-          opacity: 0.75;
-          cursor: not-allowed;
-        }
-
-        /* Animasi Shimmer (Cahaya Lewat) */
-        .premium-submit-btn::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 50%;
-          height: 100%;
-          background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0) 100%);
-          transform: skewX(-25deg);
-          animation: shimmer 3s infinite;
-        }
-
-        @keyframes shimmer {
-          0% { left: -100%; }
-          20% { left: 200%; }
-          100% { left: 200%; }
-        }
-
-        /* Animasi Loading Spinner */
-        .spinner-icon {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
+        .premium-submit-btn { width: 100%; margin-top: 10px; padding: 14px; border-radius: 12px; border: none; background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); color: white; font-weight: 700; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 10px 20px -10px rgba(99,102,241,0.6); }
+        .premium-submit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 15px 25px -10px rgba(99,102,241,0.8); }
+        .premium-submit-btn:active:not(:disabled) { transform: translateY(1px); }
+        .premium-submit-btn:disabled { opacity: 0.75; cursor: not-allowed; }
+        .premium-submit-btn::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0) 100%); transform: skewX(-25deg); animation: shimmer 3s infinite; }
+        @keyframes shimmer { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
+        .spinner-icon { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { incrementLinks } from '@/lib/statsTracker';
 
 export async function POST(req) {
   try {
@@ -11,6 +12,9 @@ export async function POST(req) {
     });
 
     // TODO: simpan semua ke database
+
+    // Increment local stats tracker
+    await incrementLinks(results.length);
 
     return NextResponse.json({ results });
   } catch {

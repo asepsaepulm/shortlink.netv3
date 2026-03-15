@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { incrementLinks } from '@/lib/statsTracker';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
 function generateCode(length = 7) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -14,9 +21,9 @@ function sanitizeSlug(value = '') {
   return value
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/[-_.]{2,}/g, (m) => m[0])
+    .replace(/^[-_.]|[-_.]$/g, '');
 }
 
 export async function POST(req) {
@@ -52,7 +59,38 @@ export async function POST(req) {
     let finalOgImageUrl = ogImageUrl;
 
     if (ogImageFile && typeof ogImageFile === 'object' && ogImageFile.size > 0) {
-      // TODO: upload ke Cloudinary/S3
+      try {
+        const bytes = await ogImageFile.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const uploadDir = join(process.cwd(), 'public', 'uploads');
+        if (!existsSync(uploadDir)) {
+          await mkdir(uploadDir, { recursive: true });
+        }
+
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+        const ext = ogImageFile.name.split('.').pop();
+        const filename = `og-${uniqueSuffix}.${ext}`;
+        const filepath = join(uploadDir, filename);
+
+        await writeFile(filepath, buffer);
+        finalOgImageUrl = `https://${domain}/uploads/${filename}`;
+      } catch (uploadError) {
+        console.error('Failed to upload image:', uploadError);
+      }
+    }
+
+    // ✅ Get userId from JWT if logged in
+    let userId = null;
+    try {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        userId = decoded.userId;
+      }
+    } catch (tokenErr) {
+      console.error('Invalid or expired token during shorten:', tokenErr);
     }
 
     const link = await prisma.link.create({
@@ -60,12 +98,16 @@ export async function POST(req) {
         code, // unik, dipakai untuk lookup redirect
         slug: slug || null, // opsional, boleh sama antar user
         domain,
-        originalUrl,
+        originalUrl, // ✅ Make sure this maps correctly
         shortUrl,
         ogTitle,
         ogImageUrl: finalOgImageUrl,
+        userId: userId, // ✅ Associate with user if logged in
       },
     });
+
+    // Increment local stats tracker
+    await incrementLinks(1);
 
     return NextResponse.json({
       success: true,

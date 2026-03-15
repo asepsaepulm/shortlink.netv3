@@ -67,17 +67,76 @@ const RotatingText = () => {
   );
 };
 
-export default function HeroSection() {
+export default function HeroSection({ isDark }) {
   const { dark } = useTheme();
   const [openFaq, setOpenFaq] = useState(0);
-  const [liveUsers, setLiveUsers] = useState(114);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  
+  // Real-time Stats & Leaderboard states
+  const [stats, setStats] = useState({ linksCreated: 0, clicksRecorded: 0, activeUsers: 1 });
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveUsers((prev) => prev + (Math.random() > 0.5 ? 1 : -1));
-    }, 4000);
-    return () => clearInterval(interval);
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/stats/hero');
+        if (res.ok) {
+          const data = await res.json();
+          setStats(prev => ({
+            ...prev,
+            linksCreated: data.linksCreated || prev.linksCreated,
+            activeUsers: data.activeUsers || prev.activeUsers,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch stats:', err);
+      } finally {
+        setIsStatsLoading(false);
+      }
+    };
+    
+    // Fetch cached real-time leaderboard
+    const fetchLeaderboard = async () => {
+      try {
+        const res = await fetch('/api/leaderboard');
+        if (res.ok) {
+          const data = await res.json();
+          setLeaderboardData(data);
+          
+          // Calculate the sum of all leaderboard clicks
+          const totalClicks = data.reduce((sum, item) => sum + (item.clicks || 0), 0);
+          
+          // Update the Hero Stat `clicksRecorded` using the leaderboard sum
+          setStats(prev => ({
+            ...prev,
+            clicksRecorded: totalClicks
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch leaderboard:', err);
+      } finally {
+        setIsLeaderboardLoading(false);
+      }
+    };
+
+    fetchStats();
+    fetchLeaderboard();
+    
+    // Poll stats every 5 seconds, poll leaderboard every 30 seconds
+    const statsInterval = setInterval(fetchStats, 5000);
+    const leaderboardInterval = setInterval(fetchLeaderboard, 5000);
+    
+    return () => {
+      clearInterval(statsInterval);
+      clearInterval(leaderboardInterval);
+    };
   }, []);
 
   const bg = dark ? '#0a0b10' : '#ffffff';
@@ -135,20 +194,20 @@ export default function HeroSection() {
               }}
             >
               <div>
-                <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>719</div>
+                <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(stats.linksCreated)}</div>
                 <div style={{ fontSize: '12px', color: textMuted, fontWeight: 700, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Links Created</div>
               </div>
               {/* ✅ Divider — tambah className="stats-divider" */}
               <div className="stats-divider" style={{ width: '1px', height: '40px', background: border }}></div>
               <div>
-                <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>441.4K</div>
+                <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(stats.clicksRecorded)}</div>
                 <div style={{ fontSize: '12px', color: textMuted, fontWeight: 700, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clicks Recorded</div>
               </div>
               {/* ✅ Divider — tambah className="stats-divider" */}
               <div className="stats-divider" style={{ width: '1px', height: '40px', background: border }}></div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>{liveUsers}</span>
+                  <span style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-1px' }}>{stats.activeUsers}</span>
                   <div style={{ padding: '3px 8px', background: 'rgba(34,197,94,0.1)', borderRadius: '6px', border: '1px solid rgba(34,197,94,0.2)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <span className="pulse-dot" style={{ width: '5px', height: '5px' }}></span>
                     <span style={{ fontSize: '10px', fontWeight: 900, color: '#22c55e', letterSpacing: '0.5px' }}>LIVE</span>
@@ -166,16 +225,86 @@ export default function HeroSection() {
         </div>
       </section>
 
-      {/* ===================== SECTION 2: BRANDS ===================== */}
-      <section style={{ padding: '60px 24px', textAlign: 'center' }}>
-        <p style={{ fontSize: '14px', color: textMuted, marginBottom: '32px', fontWeight: 600, letterSpacing: '1px' }}>TRUSTED BY WORLD-CLASS TEAMS</p>
-        <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '24px' }}>
-          {brands.map((b) => (
-            <div key={b.label} className="brand-card" style={{ width: '120px', height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: cardBg, borderRadius: '20px', border: `1px solid ${border}` }}>
-              {b.svg ? b.svg : <i className={b.icon} style={{ fontSize: '32px', color: textMuted }}></i>}
-            </div>
-          ))}
+      {/* ===================== SECTION 2: BRANDS (INFINITE MARQUEE) ===================== */}
+      <section
+        style={{
+          padding: '80px 0 40px',
+          textAlign: 'center',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <p
+          style={{
+            fontSize: '12px',
+            color: textMuted,
+            marginBottom: '40px',
+            fontWeight: 800,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+          }}
+        >
+          TRUSTED BY WORLD-CLASS TEAMS
+        </p>
+
+        {/* Container Marquee */}
+        <div style={{ display: 'flex', width: 'fit-content' }}>
+          <div className="marquee-content" style={{ display: 'flex' }}>
+            {/* Duplikasi array 2 kali agar looping mulus tanpa putus */}
+            {[...brands, ...brands].map((b, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                <div
+                  className="brand-item"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '0 40px', // Jarak ruang kiri kanan teks
+                    cursor: 'default',
+                  }}
+                >
+                  {/* Ikon */}
+                  <div
+                    className="brand-icon"
+                    style={{
+                      fontSize: '28px', // Untuk font-awesome
+                      color: b.color || 'inherit',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {b.svg ? b.svg : <i className={b.icon}></i>}
+                  </div>
+                  {/* Teks */}
+                  <span
+                    className="brand-text"
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      letterSpacing: '-0.5px',
+                    }}
+                  >
+                    {b.label}
+                  </span>
+                </div>
+
+                {/* Garis Pemisah Vertikal */}
+                <div
+                  style={{
+                    width: '1px',
+                    height: '32px',
+                    background: border,
+                    opacity: 0.6,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
+
+        {/* Overlay Gradient Kiri Kanan (Fading Effect) */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '150px', height: '100%', background: `linear-gradient(90deg, ${bg}, transparent)`, zIndex: 2, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '150px', height: '100%', background: `linear-gradient(-90deg, ${bg}, transparent)`, zIndex: 2, pointerEvents: 'none' }} />
       </section>
 
       {/* ===================== SECTION 3: FAQ ===================== */}
@@ -433,23 +562,17 @@ export default function HeroSection() {
         {/* Drawer Header */}
         <div style={{ padding: '28px 32px', borderBottom: `1px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                <polyline points="17 6 23 6 23 12"></polyline>
-              </svg>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: textPrimary }}>Global Leaderboard</h3>
-            </div>
-            <p style={{ margin: 0, fontSize: '12px', color: textMuted, fontWeight: 600 }}>Top performing links across our network</p>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: textPrimary }}>Top Users</h3>
+            <p style={{ margin: 0, fontSize: '13px', color: textMuted }}>User dengan total klik terbanyak.</p>
           </div>
           <button
             onClick={() => setIsDrawerOpen(false)}
             style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
               background: dark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
               border: 'none',
-              borderRadius: '10px',
-              width: '36px',
-              height: '36px',
               cursor: 'pointer',
               color: textMuted,
               fontSize: '18px',
@@ -460,12 +583,6 @@ export default function HeroSection() {
           >
             ✕
           </button>
-        </div>
-
-        {/* Live badge */}
-        <div style={{ padding: '12px 32px', borderBottom: `1px solid ${border}`, flexShrink: 0, background: dark ? 'rgba(34,197,94,0.05)' : 'rgba(34,197,94,0.03)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="pulse-dot" style={{ width: '6px', height: '6px' }}></span>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e' }}>Updated in real-time</span>
         </div>
 
         {/* Scrollable list */}
@@ -485,12 +602,12 @@ export default function HeroSection() {
             }}
           >
             <div>#</div>
-            <div>Users</div>
-            <div style={{ textAlign: 'right' }}>Clicks</div>
+            <div>User</div>
+            <div style={{ textAlign: 'right' }}>Total Clicks</div>
           </div>
 
           {leaderboardData.map((item, i) => (
-            <div key={item.id} className="drawer-row" style={{ display: 'grid', gridTemplateColumns: '48px 1fr 110px', padding: '18px 32px', borderBottom: `1px solid ${border}`, alignItems: 'center', transition: '0.15s' }}>
+            <div key={item.user || i} className="drawer-row" style={{ display: 'grid', gridTemplateColumns: '48px 1fr 110px', padding: '18px 32px', borderBottom: `1px solid ${border}`, alignItems: 'center', transition: '0.15s' }}>
               <div
                 style={{
                   width: '32px',
@@ -505,15 +622,14 @@ export default function HeroSection() {
                   color: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : textMuted,
                 }}
               >
-                {item.id}
+                {i + 1}
               </div>
               <div style={{ minWidth: 0, paddingRight: '12px' }}>
-                <div style={{ fontWeight: 700, fontSize: '13px', color: textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.url}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', background: item.active ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)', color: item.active ? '#22c55e' : textMuted }}>
-                    {item.active ? '● Active' : '○ Paused'}
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>{item.trend}</span>
+                <div style={{ fontWeight: 800, fontSize: '15px', color: textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.user}
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '4px', display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '100px', background: i === 0 ? 'rgba(250,204,21,0.1)' : i <= 2 ? 'rgba(148,163,184,0.1)' : dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', color: i === 0 ? '#f59e0b' : i <= 2 ? '#94a3b8' : textMuted }}>
+                  {i === 0 ? '🏆 Top Contributor' : i <= 2 ? '⭐ Elite Member' : '👤 Active Member'}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -526,9 +642,8 @@ export default function HeroSection() {
           <div style={{ height: '24px' }} />
         </div>
 
-        {/* Drawer Footer */}
         <div style={{ padding: '16px 32px', borderTop: `1px solid ${border}`, flexShrink: 0, background: dark ? 'rgba(255,255,255,0.01)' : '#f8fafc', textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: '11px', color: textMuted, fontWeight: 600 }}>Showing {leaderboardData.length} top links · Updated every 30s</p>
+          <p style={{ margin: 0, fontSize: '11px', color: textMuted, fontWeight: 600 }}>Showing {leaderboardData.length} Top Users · Updated every 5s</p>
         </div>
       </div>
 
@@ -588,6 +703,44 @@ export default function HeroSection() {
           .leaderboard-fab svg { width: 24px; height: 24px; }
         }
 
+      /* ======= ANIMASI INFINITE MARQUEE BRANDS ======= */
+        .marquee-content {
+          animation: scroll 20s linear infinite; /* Kecepatan jalan (kecilkan angka untuk lebih cepat) */
+        }
+        .marquee-content:hover {
+          animation-play-state: paused; /* Berhenti saat disorot kursor */
+        }
+        @keyframes scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); } /* Bergeser sejauh 1 kloter array penuh */
+        }
+
+
+        /* ======= EFEK ELEGAN GRAYSCALE PADA IKON ======= */
+        .brand-item {
+          transition: all 0.3s ease;
+        }
+        .brand-item .brand-icon {
+          filter: grayscale(100%);
+          opacity: 0.5;
+          transition: all 0.3s ease;
+        }
+        .brand-item .brand-text {
+          color: ${textMuted};
+          transition: all 0.3s ease;
+        }
+
+        /* Saat baris ikon di Hover, kembali berwarna asli */
+        .brand-item:hover {
+          transform: scale(1.05); /* Sedikit membesar */
+        }
+        .brand-item:hover .brand-icon {
+          filter: grayscale(0%);
+          opacity: 1;
+        }
+        .brand-item:hover .brand-text {
+          color: ${textPrimary};
+        }
         
       `}</style>
     </main>
