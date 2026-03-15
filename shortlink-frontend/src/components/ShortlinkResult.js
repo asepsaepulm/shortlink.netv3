@@ -156,7 +156,7 @@ export default function ShortlinkResult({ results }) {
               <span style={c.shortUrl}>{r.short}</span>
 
               {/* Open */}
-              <a href={r.code ? (typeof window !== 'undefined' ? `${window.location.origin}/${r.code}` : `/${r.code}`) : r.short} target="_blank" rel="noopener noreferrer" style={c.iconBtn()} title="Open">
+              <a href={r.short} target="_blank" rel="noopener noreferrer" style={c.iconBtn()} title="Open shortlink">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <polyline points="15 3 21 3 21 9" />
